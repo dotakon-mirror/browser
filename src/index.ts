@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 
 import { Wallet } from "../lib-bindings/lib";
 
@@ -50,3 +50,7 @@ app.on("activate", () => {
 
 // In this file you can include the rest of your app's specific main process code. You can also put
 // them in separate files and import them here.
+
+ipcMain.handle("wallet", async () => {
+  return Wallet.derive_new().address();
+});
