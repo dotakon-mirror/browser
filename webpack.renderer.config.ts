@@ -31,5 +31,7 @@ export const rendererConfig: Configuration = {
   },
   node: {
     global: true,
+    __filename: true,
+    __dirname: true,
   },
 };
