@@ -37,12 +37,7 @@ impl Wallet {
         H256::from_slice(&point.to_bytes())
     }
 
-    pub fn derive_new() -> Result<Self, JsValue> {
-        let mut secret_key = [0u8; 32];
-        getrandom(&mut secret_key)
-            .map_err(|_| JsValue::from_str("error generating a random key"))?;
-        let secret_key = H256::from_slice(&secret_key);
-
+    pub(crate) fn derive_impl(secret_key: H256) -> Result<Self, JsValue> {
         let ed25519_signing_key =
             ed25519_dalek::SigningKey::from_bytes(&secret_key.to_fixed_bytes());
 
@@ -64,6 +59,24 @@ impl Wallet {
         })
     }
 
+    #[wasm_bindgen(constructor)]
+    pub fn derive(secret_key: &str) -> Result<Self, JsValue> {
+        Self::derive_impl(
+            secret_key
+                .parse()
+                .map_err(|_| JsValue::from_str("invalid secret key"))?,
+        )
+    }
+
+    #[wasm_bindgen]
+    pub fn derive_new() -> Result<Self, JsValue> {
+        let mut secret_key = [0u8; 32];
+        getrandom(&mut secret_key)
+            .map_err(|_| JsValue::from_str("error generating a random key"))?;
+        Self::derive_impl(H256::from_slice(&secret_key))
+    }
+
+    #[wasm_bindgen]
     pub fn public_key_c25519(&self) -> String {
         format!(
             "{:#x}",
@@ -71,6 +84,7 @@ impl Wallet {
         )
     }
 
+    #[wasm_bindgen]
     pub fn public_key_pallas(&self) -> String {
         format!(
             "{:#x}",
@@ -78,6 +92,7 @@ impl Wallet {
         )
     }
 
+    #[wasm_bindgen]
     pub fn address(&self) -> String {
         format!("{:#x}", U256::from_little_endian(&self.address.to_repr()))
     }
