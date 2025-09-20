@@ -1,4 +1,4 @@
-use crate::bulletproofs;
+use crate::bulletproofs::{Polynomial, Proof};
 use crate::utils;
 use crate::wallet::Wallet;
 use anyhow::{Context, Result};
@@ -53,12 +53,12 @@ pub struct PasswordSet {
     salt: H256,
     seed: Scalar,
     commitment: Point,
-    inner: [bulletproofs::Proof; MAX_PASSWORDS],
+    proofs: [Proof; MAX_PASSWORDS],
 }
 
 #[wasm_bindgen]
 impl PasswordSet {
-    fn shuffle_proofs(proofs: &mut Vec<bulletproofs::Proof>) {
+    fn shuffle_proofs(proofs: &mut Vec<Proof>) {
         for i in 0..proofs.len() {
             let mut bytes = [0u8; 64];
             getrandom::getrandom(&mut bytes).unwrap();
@@ -97,21 +97,21 @@ impl PasswordSet {
                     .map_err(|_| JsValue::from_str("key derivation error"))?,
             );
         }
-        let polynomial = bulletproofs::Polynomial::from_roots(keys.as_slice())
+        let polynomial = Polynomial::from_roots(keys.as_slice())
             .map_err(|_| JsValue::from_str("interpolation error"))?;
-        let mut inner = keys
+        let mut proofs = keys
             .iter()
-            .map(|key| bulletproofs::Proof::create(&polynomial, *key))
+            .map(|key| Proof::create(&polynomial, *key))
             .collect::<Result<Vec<_>>>()
             .map_err(|_| JsValue::from_str("commitment error"))?;
-        Self::shuffle_proofs(&mut inner);
+        Self::shuffle_proofs(&mut proofs);
         Ok(Self {
             num_kdf_rounds,
             salt,
             seed: utils::get_random_scalar()
                 .map_err(|_| JsValue::from_str("seed generation error"))?,
             commitment: polynomial.commitment(),
-            inner: inner.try_into().unwrap(),
+            proofs: proofs.try_into().unwrap(),
         })
     }
 
@@ -131,7 +131,7 @@ impl PasswordSet {
         {
             return Err(JsValue::from_str("invalid wallet"));
         }
-        let inner = (0..MAX_PASSWORDS)
+        let proofs = (0..MAX_PASSWORDS)
             .map(|i| {
                 let u = parse_scalar(u[i].as_str())?;
                 let k2 = K * 2;
@@ -145,7 +145,7 @@ impl PasswordSet {
                     .collect::<Result<Vec<_>>>()?;
                 let v1 = (0..K).map(|i| (v1[i * 2], v1[i * 2 + 1])).collect();
                 let v2 = (0..K).map(|i| (v2[i * 2], v2[i * 2 + 1])).collect();
-                Ok(bulletproofs::Proof::load(u, v1, v2))
+                Ok(Proof::load(u, v1, v2))
             })
             .collect::<Result<Vec<_>>>()
             .map_err(|_| JsValue::from_str("invalid wallet"))?;
@@ -156,7 +156,7 @@ impl PasswordSet {
                 .map_err(|_| JsValue::from_str("invalid salt"))?,
             seed: parse_scalar(seed).map_err(|_| JsValue::from_str("invalid seed"))?,
             commitment: parse_point(commitment).map_err(|_| JsValue::from_str("invalid wallet"))?,
-            inner: inner.try_into().unwrap(),
+            proofs: proofs.try_into().unwrap(),
         })
     }
 
@@ -182,7 +182,7 @@ impl PasswordSet {
 
     #[wasm_bindgen]
     pub fn u(&self) -> Vec<String> {
-        self.inner
+        self.proofs
             .iter()
             .map(|proof| encode_scalar(proof.u()))
             .collect()
@@ -190,7 +190,7 @@ impl PasswordSet {
 
     #[wasm_bindgen]
     pub fn v1(&self) -> Vec<String> {
-        self.inner
+        self.proofs
             .iter()
             .map(|proof| {
                 proof
@@ -206,7 +206,7 @@ impl PasswordSet {
 
     #[wasm_bindgen]
     pub fn v2(&self) -> Vec<String> {
-        self.inner
+        self.proofs
             .iter()
             .map(|proof| {
                 proof
@@ -223,7 +223,7 @@ impl PasswordSet {
     #[wasm_bindgen]
     pub fn verify(&self, password: &str) -> Result<bool, JsValue> {
         let key = derive_key_impl(password, self.salt.as_bytes(), self.num_kdf_rounds);
-        for proof in &self.inner {
+        for proof in &self.proofs {
             if proof.verify(self.commitment, key, Scalar::ZERO).is_ok() {
                 return Ok(true);
             }
@@ -234,7 +234,7 @@ impl PasswordSet {
     #[wasm_bindgen]
     pub fn derive_wallet(&self, password: &str, index: usize) -> Result<Wallet, JsValue> {
         let key = derive_key_impl(password, self.salt.as_bytes(), self.num_kdf_rounds);
-        for proof in &self.inner {
+        for proof in &self.proofs {
             if proof.verify(self.commitment, key, Scalar::ZERO).is_ok() {
                 let secret_key = utils::poseidon_hash([self.seed, key, Scalar::from(index as u64)]);
                 return Wallet::derive_impl(H256::from_slice(&secret_key.to_repr()));

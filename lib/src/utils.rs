@@ -50,4 +50,42 @@ mod tests {
                 .unwrap()
         );
     }
+
+    #[test]
+    fn test_random_scalars() {
+        assert_ne!(get_random_scalar().unwrap(), get_random_scalar().unwrap());
+    }
+
+    #[test]
+    fn test_random_bytes() {
+        assert_ne!(get_random_bytes().unwrap(), get_random_bytes().unwrap());
+    }
+
+    #[test]
+    fn test_poseidon_hash1() {
+        assert_eq!(
+            poseidon_hash([12.into(), 34.into()]),
+            Scalar::from_repr_vartime(
+                "0x37ba0fed1c1287a45e2e73a84f4cd378939e14753629e793ae87e1b1de1371e5"
+                    .parse::<U256>()
+                    .unwrap()
+                    .to_little_endian()
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_poseidon_hash2() {
+        assert_eq!(
+            poseidon_hash([34.into(), 56.into(), 78.into()]),
+            Scalar::from_repr_vartime(
+                "0x29c72fcb4cd2419f750991b6b93f35ec641f7c48de4db37d736bcbabb04ed4b0"
+                    .parse::<U256>()
+                    .unwrap()
+                    .to_little_endian()
+            )
+            .unwrap()
+        );
+    }
 }
